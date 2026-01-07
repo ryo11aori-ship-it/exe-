@@ -1,17 +1,116 @@
-name: Run fizzbuzz.exe
+name: EXE Deep Autopsy (FizzBuzz)
 
 on:
-  push:
   workflow_dispatch:
+  push:
+    paths:
+      - fizzbuzz.exe
 
 jobs:
-  run:
+  autopsy:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Run fizzbuzz.exe
+      - name: Basic file info
         shell: pwsh
         run: |
+          Write-Host "=== FILE INFO ==="
+          Get-Item .\fizzbuzz.exe | Format-List *
+          Write-Host "=== FILE HASHES ==="
+          Get-FileHash .\fizzbuzz.exe -Algorithm MD5
+          Get-FileHash .\fizzbuzz.exe -Algorithm SHA1
+          Get-FileHash .\fizzbuzz.exe -Algorithm SHA256
+
+      - name: Execution sanity check
+        shell: pwsh
+        run: |
+          Write-Host "=== EXECUTION TEST ==="
           .\fizzbuzz.exe
+
+      - name: Authenticode signature
+        shell: pwsh
+        run: |
+          Write-Host "=== AUTHENTICODE ==="
+          Get-AuthenticodeSignature .\fizzbuzz.exe | Format-List *
+
+      - name: First 256 bytes (hex dump)
+        shell: pwsh
+        run: |
+          Write-Host "=== HEX DUMP (FIRST 256 BYTES) ==="
+          $bytes = Get-Content .\fizzbuzz.exe -Encoding Byte -TotalCount 256
+          ($bytes | ForEach-Object { $_.ToString("X2") }) -join " "
+
+      - name: Extract strings (ASCII & UTF-16)
+        shell: pwsh
+        run: |
+          Write-Host "=== STRINGS (ASCII) ==="
+          Get-Content .\fizzbuzz.exe -Encoding Byte |
+            ForEach-Object { [char]$_ } |
+            -join "" |
+            Select-String -Pattern "[\x20-\x7E]{4,}" -AllMatches |
+            ForEach-Object { $_.Matches.Value } |
+            Sort-Object -Unique
+
+          Write-Host "=== STRINGS (UTF-16 LE) ==="
+          strings.exe .\fizzbuzz.exe 2>$null || Write-Host "(strings.exe not present, skipping)"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install pefile
+        run: pip install pefile
+
+      - name: PE structure analysis (pefile)
+        shell: pwsh
+        run: |
+          python - << 'EOF'
+          import pefile
+          pe = pefile.PE("fizzbuzz.exe")
+
+          print("=== PE HEADER ===")
+          print(pe.FILE_HEADER)
+          print(pe.OPTIONAL_HEADER)
+
+          print("\n=== SECTIONS ===")
+          for s in pe.sections:
+              print(s.Name.decode(errors="ignore"),
+                    hex(s.VirtualAddress),
+                    hex(s.Misc_VirtualSize),
+                    hex(s.SizeOfRawData),
+                    s.Characteristics)
+
+          print("\n=== IMPORTS ===")
+          if hasattr(pe, 'DIRECTORY_ENTRY_IMPORT'):
+              for entry in pe.DIRECTORY_ENTRY_IMPORT:
+                  print(entry.dll.decode())
+                  for imp in entry.imports:
+                      print(" ", hex(imp.address), imp.name)
+          else:
+              print("No imports")
+
+          print("\n=== EXPORTS ===")
+          if hasattr(pe, 'DIRECTORY_ENTRY_EXPORT'):
+              for exp in pe.DIRECTORY_ENTRY_EXPORT.symbols:
+                  print(exp.name, exp.address)
+          else:
+              print("No exports")
+
+          print("\n=== RESOURCE SUMMARY ===")
+          if hasattr(pe, 'DIRECTORY_ENTRY_RESOURCE'):
+              print("Has resources")
+          else:
+              print("No resources")
+          EOF
+
+      - name: Heuristic summary
+        shell: pwsh
+        run: |
+          Write-Host "=== HEURISTIC SUMMARY ==="
+          Write-Host "- No network access test"
+          Write-Host "- No registry access test"
+          Write-Host "- Pure file -> stdout transformer expected"
