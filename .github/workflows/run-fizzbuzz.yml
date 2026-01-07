@@ -26,7 +26,7 @@ jobs:
           Get-Item .\fizzbuzz.exe | Format-List *
 
           Write-Host "=== First 64 bytes (hex) ==="
-          $bytes = Get-Content .\fizzbuzz.exe -Encoding Byte -TotalCount 64
+          $bytes = [System.IO.File]::ReadAllBytes(".\fizzbuzz.exe")[0..63]
           $bytes | ForEach-Object { $_.ToString("X2") } -join " "
 
       - name: Try to execute fizzbuzz.exe
