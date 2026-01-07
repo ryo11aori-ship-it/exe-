@@ -1,21 +1,13 @@
-name:DeepAnalyze
+name: sanity-check
+
 on:
   push:
-  workflow_dispatch:
+
 jobs:
-  analyze_binary:
+  test:
     runs-on: windows-latest
     steps:
-      - name: Check Files
-        run: |
-          ls -Recurse
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Analyze
-        run: |
-          Write-Host "Action Started!"
-          if (Test-Path "fizzbuzz.exe") {
-            Write-Host "fizzbuzz.exe found."
-          } else {
-            Write-Host "fizzbuzz.exe NOT FOUND in root."
-          }
+      - uses: actions/checkout@v4
+
+      - name: hello
+        run: echo "hello world"
