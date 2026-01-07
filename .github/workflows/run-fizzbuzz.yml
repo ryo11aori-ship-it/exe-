@@ -1,97 +1,52 @@
-name: EXE Deep Autopsy - FizzBuzz
-
+name:DeepAnalyzeFizzBuzzExe
 on:
   push:
-
+    paths:
+      - '**'
 jobs:
-  autopsy:
+  analyze_binary:
     runs-on: windows-latest
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: File info & hashes
-        shell: pwsh
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Setup MSVC Dev Cmd
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: 1. Calculate Hashes
         run: |
-          Write-Host "=== FILE INFO ==="
-          Get-Item .\fizzbuzz.exe | Format-List *
-
-          Write-Host "=== FILE HASHES ==="
-          Get-FileHash .\fizzbuzz.exe -Algorithm MD5
-          Get-FileHash .\fizzbuzz.exe -Algorithm SHA1
-          Get-FileHash .\fizzbuzz.exe -Algorithm SHA256
-
-      - name: Execution test
-        shell: pwsh
+          Write-Host "--- SHA256 HASH ---"
+          Get-FileHash fizzbuzz.exe -Algorithm SHA256 | Format-List
+          Write-Host "--- MD5 HASH ---"
+          Get-FileHash fizzbuzz.exe -Algorithm MD5 | Format-List
+      - name: 2. File Metadata and Attributes
         run: |
-          Write-Host "=== EXECUTION TEST ==="
-          .\fizzbuzz.exe || Write-Host "(Non-zero exit allowed)"
-
-      - name: Authenticode signature
-        shell: pwsh
+          Write-Host "--- FILE INFO ---"
+          Get-Item fizzbuzz.exe | Select-Object * | Format-List
+          Write-Host "--- ATTRIBUTES ---"
+          attrib fizzbuzz.exe
+      - name: 3. Hex Dump (First 2KB)
         run: |
-          Write-Host "=== AUTHENTICODE ==="
-          Get-AuthenticodeSignature .\fizzbuzz.exe | Format-List *
-
-      - name: Hex dump (first 256 bytes)
-        shell: pwsh
+          Write-Host "--- RAW HEX DUMP (HEAD) ---"
+          Format-Hex -Path fizzbuzz.exe -Count 2048
+      - name: 4. Static Analysis (PE Headers & Imports)
+        shell: cmd
         run: |
-          Write-Host "=== HEX DUMP ==="
-          $bytes = Get-Content .\fizzbuzz.exe -AsByteStream -TotalCount 256
-          ($bytes | ForEach-Object { $_.ToString("X2") }) -join " "
-
-      - name: ASCII strings (manual)
-        shell: pwsh
+          echo --- PE HEADERS and IMPORTS ---
+          dumpbin /HEADERS /IMPORTS /DEPENDENTS /SUMMARY fizzbuzz.exe
+      - name: 5. Deep Disassembly (The Naked Truth)
+        shell: cmd
         run: |
-          Write-Host "=== STRINGS (ASCII >=4) ==="
-          $bytes = Get-Content .\fizzbuzz.exe -AsByteStream
-          $text = -join ($bytes | ForEach-Object {
-            if ($_ -ge 0x20 -and $_ -le 0x7E) { [char]$_ } else { " " }
-          })
-          $text -split " +" | Where-Object { $_.Length -ge 4 } | Sort-Object -Unique
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Install pefile
-        run: pip install pefile
-
-      - name: PE structure analysis
+          echo --- DISASSEMBLY (ASM CODE) ---
+          dumpbin /DISASM fizzbuzz.exe
+      - name: 6. Full Raw Dump (Optional - Very Long)
+        shell: cmd
         run: |
-          python -c
-import pefile
-pe = pefile.PE('fizzbuzz.exe')
-
-print('=== PE HEADER ===')
-print(pe.FILE_HEADER)
-print(pe.OPTIONAL_HEADER)
-
-print('\\n=== SECTIONS ===')
-for s in pe.sections:
-    print(s.Name.decode(errors='ignore'),
-          hex(s.VirtualAddress),
-          hex(s.Misc_VirtualSize),
-          hex(s.SizeOfRawData),
-          hex(s.Characteristics))
-
-print('\\n=== IMPORTS ===')
-if hasattr(pe, 'DIRECTORY_ENTRY_IMPORT'):
-    for e in pe.DIRECTORY_ENTRY_IMPORT:
-        print(e.dll.decode())
-        for i in e.imports:
-            print(' ', hex(i.address), i.name)
-else:
-    print('No imports')
-
-print('\\n=== RESOURCES ===')
-print('Yes' if hasattr(pe, 'DIRECTORY_ENTRY_RESOURCE') else 'No')
-"
-
-      - name: Heuristic summary
+          echo --- FULL RAW DATA DUMP ---
+          dumpbin /RAWDATA fizzbuzz.exe
+      - name: 7. Execution Test
         run: |
-          echo "=== HEURISTIC SUMMARY ==="
-          echo "- No network APIs detected"
-          echo "- No registry usage detected"
-          echo "- Deterministic CLI transformer behavior"
+          Write-Host "--- RUNNING EXECUTABLE ---"
+          try {
+            .\fizzbuzz.exe
+          } catch {
+            Write-Host "Execution failed: $_"
+          }
