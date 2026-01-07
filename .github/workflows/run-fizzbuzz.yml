@@ -1,7 +1,6 @@
 name: EXE Deep Autopsy (FizzBuzz)
 
 on:
-  workflow_dispatch:
   push:
     paths:
       - fizzbuzz.exe
