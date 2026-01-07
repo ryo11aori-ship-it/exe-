@@ -1,4 +1,4 @@
-name: Run fizzbuzz on Windows
+name: Run fizzbuzz.exe on Windows
 
 on:
   push:
@@ -13,23 +13,29 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Show file info
+      - name: List repository root
+        shell: pwsh
+        run: |
+          Write-Host "=== Repository root ==="
+          Get-ChildItem -Force
+
+      - name: Show fizzbuzz.exe info
         shell: pwsh
         run: |
           Write-Host "=== File existence check ==="
-          Get-Item ./fizzbuzz | Format-List *
+          Get-Item .\fizzbuzz.exe | Format-List *
 
           Write-Host "=== First 64 bytes (hex) ==="
-          $bytes = Get-Content ./fizzbuzz -Encoding Byte -TotalCount 64
+          $bytes = Get-Content .\fizzbuzz.exe -Encoding Byte -TotalCount 64
           $bytes | ForEach-Object { $_.ToString("X2") } -join " "
 
-      - name: Try to execute fizzbuzz
+      - name: Try to execute fizzbuzz.exe
         shell: pwsh
         continue-on-error: true
         run: |
           Write-Host "=== Attempting execution ==="
           try {
-            & .\fizzbuzz
+            & .\fizzbuzz.exe
             Write-Host "Execution finished."
             Write-Host "ExitCode: $LASTEXITCODE"
           } catch {
@@ -37,7 +43,7 @@ jobs:
             Write-Host $_
           }
 
-      - name: Explicit exit code report
+      - name: Final exit code report
         shell: pwsh
         run: |
           Write-Host "Final observed exit code: $LASTEXITCODE"
