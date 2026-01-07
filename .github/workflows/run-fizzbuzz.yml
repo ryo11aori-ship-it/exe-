@@ -60,7 +60,7 @@ jobs:
 
       - name: PE structure analysis
         run: |
-          python -c "
+          python -c
 import pefile
 pe = pefile.PE('fizzbuzz.exe')
 
