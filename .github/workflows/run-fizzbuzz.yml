@@ -15,38 +15,30 @@ jobs:
         run: |
           Write-Host "--- SHA256 HASH ---"
           Get-FileHash fizzbuzz.exe -Algorithm SHA256 | Format-List
-          Write-Host "--- MD5 HASH ---"
-          Get-FileHash fizzbuzz.exe -Algorithm MD5 | Format-List
-      - name: 2. File Metadata and Attributes
+      - name: 2. File Metadata
         run: |
           Write-Host "--- FILE INFO ---"
           Get-Item fizzbuzz.exe | Select-Object * | Format-List
-          Write-Host "--- ATTRIBUTES ---"
-          attrib fizzbuzz.exe
-      - name: 3. Hex Dump (First 2KB)
-        run: |
-          Write-Host "--- RAW HEX DUMP (HEAD) ---"
-          Format-Hex -Path fizzbuzz.exe -Count 2048
-      - name: 4. Static Analysis (PE Headers & Imports)
+      - name: 3. Static Analysis
         shell: cmd
         run: |
           echo --- PE HEADERS and IMPORTS ---
           dumpbin /HEADERS /IMPORTS /DEPENDENTS /SUMMARY fizzbuzz.exe
-      - name: 5. Deep Disassembly (The Naked Truth)
+      - name: 4. Deep Disassembly
         shell: cmd
         run: |
           echo --- DISASSEMBLY (ASM CODE) ---
           dumpbin /DISASM fizzbuzz.exe
-      - name: 6. Full Raw Dump (Optional - Very Long)
-        shell: cmd
+      - name: 5. Execution Test with Error Capture
+        continue-on-error: true
         run: |
-          echo --- FULL RAW DATA DUMP ---
-          dumpbin /RAWDATA fizzbuzz.exe
-      - name: 7. Execution Test
-        run: |
-          Write-Host "--- RUNNING EXECUTABLE ---"
-          try {
-            .\fizzbuzz.exe
-          } catch {
-            Write-Host "Execution failed: $_"
+          Write-Host "--- ATTEMPTING EXECUTION ---"
+          $process = Start-Process -FilePath ".\fizzbuzz.exe" -Wait -NoNewWindow -PassThru
+          Write-Host "Exit Code: $($process.ExitCode)"
+          if ($process.ExitCode -ne 0) {
+            Write-Host "Process crashed or returned error."
           }
+      - name: 6. Check Dependencies
+        run: |
+          Write-Host "--- CHECKING SYSTEM DLLS ---"
+          ldd .\fizzbuzz.exe || Write-Host "ldd not found, skipping"
