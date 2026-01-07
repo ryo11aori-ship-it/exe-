@@ -65,51 +65,7 @@ jobs:
       - name: Install pefile
         run: pip install pefile
 
-      # --- PE 解析（Pythonは必ずファイル化） ---
-      - name: PE structure analysis (pefile)
-        shell: pwsh
-        run: |
-          @"
-import pefile
-
-pe = pefile.PE("fizzbuzz.exe")
-
-print("=== PE HEADER ===")
-print(pe.FILE_HEADER)
-print(pe.OPTIONAL_HEADER)
-
-print("\n=== SECTIONS ===")
-for s in pe.sections:
-    print(
-        s.Name.decode(errors="ignore"),
-        hex(s.VirtualAddress),
-        hex(s.Misc_VirtualSize),
-        hex(s.SizeOfRawData),
-        hex(s.Characteristics)
-    )
-
-print("\n=== IMPORTS ===")
-if hasattr(pe, "DIRECTORY_ENTRY_IMPORT"):
-    for e in pe.DIRECTORY_ENTRY_IMPORT:
-        print(e.dll.decode(errors="ignore"))
-        for i in e.imports:
-            print(" ", hex(i.address), i.name)
-else:
-    print("No imports")
-
-print("\n=== EXPORTS ===")
-if hasattr(pe, "DIRECTORY_ENTRY_EXPORT"):
-    for s in pe.DIRECTORY_ENTRY_EXPORT.symbols:
-        print(s.name, hex(s.address))
-else:
-    print("No exports")
-
-print("\n=== RESOURCES ===")
-print("Yes" if hasattr(pe, "DIRECTORY_ENTRY_RESOURCE") else "No")
-"@ | Out-File analyze.py -Encoding utf8
-
-          python analyze.py
-
+     
       # --- ヒューリスティック要約 ---
       - name: Heuristic summary
         shell: pwsh
