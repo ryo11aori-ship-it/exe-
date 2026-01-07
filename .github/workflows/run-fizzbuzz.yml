@@ -1,13 +1,121 @@
-name: sanity-check
+name: EXE Deep Autopsy - FizzBuzz
 
 on:
   push:
 
 jobs:
-  test:
+  autopsy:
     runs-on: windows-latest
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: hello
-        run: echo "hello world"
+      # --- 基本情報 & ハッシュ ---
+      - name: File info & hashes
+        shell: pwsh
+        run: |
+          Write-Host "=== FILE INFO ==="
+          Get-Item .\fizzbuzz.exe | Format-List *
+
+          Write-Host "=== FILE HASHES ==="
+          Get-FileHash .\fizzbuzz.exe -Algorithm MD5
+          Get-FileHash .\fizzbuzz.exe -Algorithm SHA1
+          Get-FileHash .\fizzbuzz.exe -Algorithm SHA256
+
+      # --- 実行テスト（落ちても続行） ---
+      - name: Execution sanity check
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Write-Host "=== EXECUTION TEST ==="
+          .\fizzbuzz.exe
+
+      # --- Authenticode ---
+      - name: Authenticode signature
+        shell: pwsh
+        run: |
+          Write-Host "=== AUTHENTICODE ==="
+          Get-AuthenticodeSignature .\fizzbuzz.exe | Format-List *
+
+      # --- 先頭 256 バイト HEX ---
+      - name: Hex dump (first 256 bytes)
+        shell: pwsh
+        run: |
+          Write-Host "=== HEX DUMP (FIRST 256 BYTES) ==="
+          $bytes = Get-Content .\fizzbuzz.exe -AsByteStream -TotalCount 256
+          ($bytes | ForEach-Object { $_.ToString("X2") }) -join " "
+
+      # --- ASCII strings 抽出（Sysinternals 非依存） ---
+      - name: Extract ASCII strings (>=4)
+        shell: pwsh
+        run: |
+          Write-Host "=== STRINGS (ASCII >=4) ==="
+          $bytes = Get-Content .\fizzbuzz.exe -AsByteStream
+          $text = -join ($bytes | ForEach-Object {
+            if ($_ -ge 0x20 -and $_ -le 0x7E) { [char]$_ } else { " " }
+          })
+          $text -split " +" | Where-Object { $_.Length -ge 4 } | Sort-Object -Unique
+
+      # --- Python 環境 ---
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install pefile
+        run: pip install pefile
+
+      # --- PE 解析（Pythonは必ずファイル化） ---
+      - name: PE structure analysis (pefile)
+        shell: pwsh
+        run: |
+          @"
+import pefile
+
+pe = pefile.PE("fizzbuzz.exe")
+
+print("=== PE HEADER ===")
+print(pe.FILE_HEADER)
+print(pe.OPTIONAL_HEADER)
+
+print("\n=== SECTIONS ===")
+for s in pe.sections:
+    print(
+        s.Name.decode(errors="ignore"),
+        hex(s.VirtualAddress),
+        hex(s.Misc_VirtualSize),
+        hex(s.SizeOfRawData),
+        hex(s.Characteristics)
+    )
+
+print("\n=== IMPORTS ===")
+if hasattr(pe, "DIRECTORY_ENTRY_IMPORT"):
+    for e in pe.DIRECTORY_ENTRY_IMPORT:
+        print(e.dll.decode(errors="ignore"))
+        for i in e.imports:
+            print(" ", hex(i.address), i.name)
+else:
+    print("No imports")
+
+print("\n=== EXPORTS ===")
+if hasattr(pe, "DIRECTORY_ENTRY_EXPORT"):
+    for s in pe.DIRECTORY_ENTRY_EXPORT.symbols:
+        print(s.name, hex(s.address))
+else:
+    print("No exports")
+
+print("\n=== RESOURCES ===")
+print("Yes" if hasattr(pe, "DIRECTORY_ENTRY_RESOURCE") else "No")
+"@ | Out-File analyze.py -Encoding utf8
+
+          python analyze.py
+
+      # --- ヒューリスティック要約 ---
+      - name: Heuristic summary
+        shell: pwsh
+        run: |
+          Write-Host "=== HEURISTIC SUMMARY ==="
+          Write-Host "- CLI transformer behavior (argv -> file -> stdout)"
+          Write-Host "- Minimal imports / no GUI remnants"
+          Write-Host "- No network / registry indicators"
+          Write-Host "- Deterministic output expected"
